@@ -1,9 +1,10 @@
 import csv
-from search import DStar
+from d_star import DStar
 
 
 # Load map, start and goal point.
 def load_map(file_path):
+    # TODO: Change this into a service call and adjust start and goal
     grid = []
     start = [0, 0]
     goal = [0, 0]
@@ -30,6 +31,7 @@ if __name__ == "__main__":
     grid, start, goal = load_map('map1.csv')
     dynamic_grid, _, _ = load_map('dynamic_map1.csv')
     grid, start, goal = load_map('map2.csv')
+    # TODO: adjust dynamic grid to be sensor values
     dynamic_grid, _, _ = load_map('dynamic_map2.csv')
     # grid, start, goal = load_map('map3.csv')
     # dynamic_grid, _, _ = load_map('dynamic_map3.csv')

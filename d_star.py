@@ -280,6 +280,7 @@ class DStar:
 
         # Visualize the first path if found
         self.get_backpointer_list(self.start)
+        # TODO: change it from visualization to moving robot
         self.draw_path(self.grid, "Path in static map")
         if self.path == []:
             print("No path is found")
@@ -290,6 +291,7 @@ class DStar:
                 self.repair_replan(setpoint)
         # Start from start to goal
         # Update the path if there is any change in the map
+        # TODO: Change current state to be robot's location
         while current_state is not self.goal:
             # Check if any repair needs to be done
             # using self.prepare_repair
@@ -333,6 +335,7 @@ class DStar:
 
     def draw_path(self, grid, title="Path"):
         '''Visualization of the found path using matplotlib'''
+        # TODO: Should not be used or adjusted so that it shows the path in rviz
         fig, ax = plt.subplots(1)
         ax.margins()
 
