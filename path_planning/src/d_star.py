@@ -2,7 +2,7 @@
 
 import rospy
 from geometry_msgs.msg import PoseStamped, Twist, Pose
-from nav_msgs.msg import OccupancyGrid, Path
+from nav_msgs.msg import OccupancyGrid, Path, MapMetaData
 
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 import math
@@ -16,14 +16,14 @@ class Node:
         self.is_obs = is_obs  # obstacle?
         self.is_dy_obs = is_dy_obs  # dynamic obstacle?
         self.tag = "NEW"  # tag ("NEW", "OPEN", "CLOSED")
-        self.h = math.inf  # cost to goal (NOT heuristic)
-        self.k = math.inf  # best h
+        self.h = 100000000  # cost to goal (NOT heuristic)
+        self.k = 100000000  # best h
         self.parent = None  # parent node
         self.cost = cost # cost map value between 0 and 100 (% confidence it is obstacle)
 
 
 class DStar:
-    def __init__(self, grid= [[0, 0], [0, 0]], dynamic_grid = [], start=[0, 0], goal=[0, 0]):
+    def __init__(self, grid= [[0, 0], [0, 0]], dynamic_grid = [[0]], start=[0, 0], goal=[0, 0]):
         #TODO: set up publishers and subscribers to these topics
         # (make the subscribers update each thing in the handlers)
 
@@ -43,12 +43,20 @@ class DStar:
 
         # Maps
         self.grid = grid  # the pre-known grid map
+        self.gridinfo = MapMetaData()
+
         self.dynamic_grid = dynamic_grid  # the actual grid map (with dynamic obstacles)
+        self.dynamic_gridinfo = None
+        self.dynamic_row = len(grid)
+        self.dynamic_col = len(grid[0])
 
         # Create a new grid to store nodes
         size_row = len(grid)
         size_col = len(grid[0])
         self.grid_node = [[None for i in range(size_col)] for j in range(size_row)]
+        for row in range(size_row):
+            for col in range(size_col):
+                self.grid_node[row][col] = self.instantiate_node((row, col), 0)
 
         # The start node
         self.start = self.grid_node[start[0]][start[1]] # where the robot is in grid coordinates
@@ -69,7 +77,7 @@ class DStar:
         '''
         #TODO: CONNECT THIS TO A TOPIC
         grid_goal = self.global2grid((data.pose.position.x, data.pose.position.y))
-        self.goal = [grid_goal[0],grid_goal[1]]
+        self.goal = self.grid_node[grid_goal[0],grid_goal[1]]
         self.goal_pose = data.pose
         # reset the path and the checked nodes
         self.path = []
@@ -107,12 +115,32 @@ class DStar:
                 self.grid_node[row][col] = self.instantiate_node((row, col), self.gridinfo[row][col])
 
     def make_dynamicGrid(self, data):
-        self.dynamic_grid = data
+        self.dynamic_grid = data.data
+        self.dynamic_gridinfo = data.info
+        self.dynamic_row = self.gridinfo.height
+        self.dynamic_col = self.gridinfo.width
+
+    def grid2dynamic(self, point):
+        '''need to align the dynamic sensor occupancy grid with the world occupancy grid
+        '''
+        row = point[0]*self.gridinfo.resolution + self.gridinfo.origin.position.y
+        col = point[1]*self.gridinfo.resolution + self.gridinfo.origin.position.x
+
+        row = (row - self.dynamic_gridinfo.origin.position.y)*self.dynamic_gridinfo.resolution
+        col = (col - self.dynamic_gridinfo.origin.position.x)*self.dynamic_gridinfo.resolution
+
+        row = int(row)
+        col = int(col)
+        # check if the tf coords are within range
+        if 0 <= row < self.dynamic_gridinfo.height and 0 <= col < self.dynamic_gridinfo.width:
+            return [row, col]
+        else:
+            return None
 
     def global2grid(self, point):
         ''' tf from global coordinates to a grid node
         '''
-        origin = [self.gridinfo.origin.x, self.gridinfo.origin.y]
+        origin = [self.gridinfo.origin.position.x, self.gridinfo.origin.position.y]
         resolution = self.gridinfo.resolution
 
         row = (point[1] - origin[1])/resolution
@@ -122,11 +150,11 @@ class DStar:
     def grid2global(self, point):
         ''' tf from grid coordinates to a global coords
         '''
-        origin = [self.gridinfo.origin.x, self.gridinfo.origin.y]
+        origin = [self.gridinfo.origin.position.x, self.gridinfo.origin.position.y]
         resolution = self.gridinfo.resolution
 
-        row = point[1]*resolution + origin[1]
-        col = point[0]*resolution + origin[0]
+        row = point.row*resolution + origin[1]
+        col = point.col*resolution + origin[0]
         return [row, col]
 
 
@@ -134,14 +162,22 @@ class DStar:
         ''' Instatiate a node given point (x, y) 
             val is the confidence it is an obstacle
         '''
-
         row, col = point
+        if self.dynamic_gridinfo:
+            dynamic_point = self.grid2dynamic(point)
+            if dynamic_point:
+                dynamic_object = (self.dynamic_grid[dynamic_point[0]][dynamic_point[1]] > 50)
+            else:
+                dynamic_object = False
+        else:
+            dynamic_object = False  
+
         if val > 50 or val == -1:
             node = Node(row, col, True,
-                        not self.dynamic_grid[row][col], val)
+                        dynamic_object, val)
         else:
             node = Node(row, col, False,
-                        not self.dynamic_grid[row][col], val)
+                        dynamic_object, val)
         return node
 
     def get_k_min(self):
@@ -214,7 +250,7 @@ class DStar:
 
         # If any of the node is an obstacle
         if node1.is_obs or node2.is_obs:
-            return math.inf
+            return 100000000
         # Euclidean distance
         a = node1.row - node2.row
         b = node1.col - node2.col
@@ -285,7 +321,7 @@ class DStar:
 
         k_min = 0
         h_y = node.h
-        while self.open and k_min < h_y and k_min is not math.inf:
+        while self.open and k_min < h_y and k_min is not 100000000:
             k_min = self.process_state()
 
         if self.open:
@@ -312,7 +348,7 @@ class DStar:
         # if the goal is surrounded the minimum k should be infinity because they all go through an obstacle
         if surrounded:
             print("Goal is blocked off, no path possible")
-            return math.inf
+            return 100000000
 
         # Put the obstacle node and the neighbor node back to Open list
         obstacle_h = self.cost(obstacle_node, obstacle_node.parent) + obstacle_node.parent.k
@@ -394,7 +430,7 @@ class DStar:
         current_node = self.path[0]
 
         # TODO: Change current state to be robot's location
-        while self.current_state is not self.goal and current_goal == self.goal:
+        while self.current_state is not self.goal and current_goal == self.goal and current_node is not None:
             # Check if any repair needs to be done
             # using self.prepare_repair
             self.prepare_repair(current_node)
@@ -423,8 +459,9 @@ class DStar:
         current_ori = self.current_state.orientation
         orientation_list = [current_ori.x, current_ori.y, current_ori.z, current_ori.w]
         (_, _, yaw) = euler_from_quaternion (orientation_list)
-        goal_x = point[1]
-        goal_y = point[0]
+        goal = self.grid2global(point)
+        goal_x = goal[1]
+        goal_y = goal[0]
         allowable_error = 0.01
         lin_vel_offset = 0.1
         lin_vel_modifyer = 1
@@ -480,5 +517,5 @@ if __name__ == "__main__":
     d_star = DStar()
 
     # Run D*
-    # d_star.run()
+    d_star.run()
     print("test")
