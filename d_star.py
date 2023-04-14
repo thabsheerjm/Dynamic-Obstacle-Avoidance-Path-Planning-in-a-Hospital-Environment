@@ -1,8 +1,6 @@
 import rospy
-from geometry_msgs import PoseStamped, Twist, Pose
+from geometry_msgs import PoseStamped, Twist
 from nav_msgs import OccupancyGrid, Path
-
-from tf.transformations import euler_from_quaternion, quaternion_from_euler
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
@@ -44,18 +42,17 @@ class DStar:
         # Maps
         self.grid = grid  # the pre-known grid map
         self.dynamic_grid = dynamic_grid  # the actual grid map (with dynamic obstacles)
-
         # Create a new grid to store nodes
         size_row = len(grid)
         size_col = len(grid[0])
-        self.grid_node = [[None for i in range(size_col)] for j in range(size_row)]
+        self.grid_node = [[None fo/gopher_presence/base_controller/cmd_velr i in range(size_col)] for j in range(size_row)]
         for row in range(size_row):
             for col in range(size_col):
                 self.grid_node[row][col] = self.instantiate_node((row, col))
 
         # The start node
         self.start = self.grid_node[start[0]][start[1]]
-        self.current_state = Pose()
+        current_state = Pose()
         # The goal node
         self.goal = self.grid_node[goal[0]][goal[1]]
 
@@ -70,19 +67,9 @@ class DStar:
         # reset the path and the checked nodes
         self.path = []
         self.open = set()
-        # stop moving
-        stop = Twist()
-        stop.linear.x = 0.0
-        stop.linear.y = 0.0
-        stop.linear.z = 0.0
-        stop.angular.x = 0.0
-        stop.angular.y = 0.0
-        stop.angular.z = 0.0
-        self.velPub(stop)
 
     def update_start(self, data):
-        self.start = self.grid_node[data.pose.position.x, data.pose.position.y]
-        self.current_state = data.pose
+        self.start = self.grid_node[data.x, data.y]
 
     def make_grid(self, data):
         self.grid = data
@@ -328,86 +315,56 @@ class DStar:
         # Search from goal to start with the pre-known map
         current_goal = self.goal
         self.insert(self.goal, 0)
-        current_state = self.start
+
         # Process until open set is empty or start is reached
-        while self.open and current_goal == self.goal:
+        while self.open and (current_goal == self.goal):
             # using self.process_state()
             self.process_state()
+
+        # TODO: publisher for RVIS visualization
 
         # Visualize the first path if found
         self.get_backpointer_list(self.start)
 
-        # TODO: change to the publisher for RVIS visualization
-        
+        # TODO: change it from visualization to moving robot
+        # self.draw_path()
         if self.path == []:
             print("No path is found")
             return
 
+        # this section should do nothing??
+        for setpoint in self.path:
+            if not setpoint.is_dy_obs:
+                self.repair_replan(setpoint)
+
         # Start from start to goal
         # Update the path if there is any change in the map
-        current_node = self.path[0]
-
+        
         # TODO: Change current state to be robot's location
-        while self.current_state is not self.goal and current_goal == self.goal:
+        while self.start is not self.goal and current_goal == self.goal:
             # Check if any repair needs to be done
             # using self.prepare_repair
-            self.prepare_repair(current_node)
+            self.prepare_repair(self.start)
 
             # Replan a path from the current node
             # using self.repair_replan
-            self.repair_replan(current_node)
+            self.repair_replan(self.start)
 
             # Get the new path from the current node
-            self.get_backpointer_list(current_node)
+            self.get_backpointer_list(self.start)
             # print("parent of (", current_state.col, ",", current_state.row, ") is (", current_state.parent.col, ",",
             #      current_state.parent.row, ")")
 
             # for visualizing and move here
-            self.move_robot(current_node)
-            current_node = current_node.parent
-
 
     def move_robot(self, point):
-        ''' move the robot to the given point
+        '''move the robot to the given point
 
             arguments:
-            point - Node for the next point in the path
+                point - a node in the grid
         '''
-        current_pos = self.current_state.position
-        current_ori = self.current_state.orientation
-        orientation_list = [current_ori.x, current_ori.y, current_ori.z, current_ori.w]
-        (_, _, yaw) = euler_from_quaternion (orientation_list)
-        goal_x = point[1]
-        goal_y = point[0]
-        allowable_error = 0.01
-        lin_vel_offset = 0.1
-        lin_vel_modifyer = 1
-        ang_vel_offset = 0.01
-        ang_vel_modifyer = 1
 
-        while abs(current_pos.x - goal_x) + abs(current_pos.y - goal_y) > allowable_error:
-            heading = math.atan2(goal_y - current_pos.y, goal_x - current_pos.x)
-            adjust_heading = yaw - heading
-            if adjust_heading > math.pi/2:
-                lin_vel = 0
-            else:
-                lin_vel = lin_vel_modifyer* self.dist(current_pos.x, current_pos.y, goal_x, goal_y) + lin_vel_offset
-
-            ang_vel = adjust_heading*ang_vel_modifyer + ang_vel_offset
-            robot_cmd = Twist()
-            robot_cmd.linear.x = lin_vel*math.cos(heading)
-            robot_cmd.linear.y = lin_vel*math.sin(heading)
-            robot_cmd.linear.z = 0.0
-            robot_cmd.angular.x = 0.0
-            robot_cmd.angular.y = 0.0
-            robot_cmd.angular.z = ang_vel
-
-            self.velPub(robot_cmd)
-    
-
-    
-    def dist(self, x1, y1, x2, y2):
-        return math.sqrt((x1-x2)**2 + (y1-y2**2))
+        current_position = self.current_state
 
     def get_backpointer_list(self, node):
         ''' Keep tracing back to get the path from a given node to goal '''
@@ -425,4 +382,4 @@ class DStar:
         # If there is not such a path
         if cur_node != self.goal:
             self.path = []
-_
+

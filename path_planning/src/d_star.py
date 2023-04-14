@@ -35,11 +35,11 @@ class DStar:
         # /model_pose # Pose Stamped (start/current state)
         rospy.Subscriber("/model_pose", PoseStamped, self.update_start)
 
-        #publishers 
-         # /gopher_presence/move_base/TrajectoryPlannerROS/global_plan (copy for visualization, Path)
-        pathPub = rospy.Publisher('/gopher_presence/d_star/path', Path, queue_size=10)
+        #
+        # /gopher_presence/move_base/TrajectoryPlannerROS/global_plan (copy for visualization, Path)
+        self.pathPub = rospy.Publisher('/gopher_presence/d_star/path', Path, queue_size=10)
         # /gopher_presence/base_controller/cmd_vel (twist)
-        velPub = rospy.Publisher('/gopher_presence/base_controller/cmd_vel', Twist, queue_size= 10)
+        self.velPub = rospy.Publisher('/gopher_presence/base_controller/cmd_vel', Twist, queue_size= 10)
 
         # Maps
         self.grid = grid  # the pre-known grid map
@@ -49,6 +49,7 @@ class DStar:
         self.dynamic_gridinfo = None
         self.dynamic_row = len(grid)
         self.dynamic_col = len(grid[0])
+
 
         # Create a new grid to store nodes
         size_row = len(grid)
@@ -94,31 +95,38 @@ class DStar:
         stop.angular.x = 0.0
         stop.angular.y = 0.0
         stop.angular.z = 0.0
-        self.velPub(stop)
+        self.velPub.publish(stop)
 
     def update_start(self, data):
         ''' subcriber function attached to /model_pose
             PoseStamped, in gobal coordinate frame 
         '''
         grid_start = self.global2grid((data.pose.position.x, data.pose.position.y))
-        self.start = self.grid_node[grid_start[0], grid_start[1]]
+        if self.grid_node:
+            self.start = self.grid_node[int(grid_start[0])][int(grid_start[1])]
+        else:
+            self.start = self.instantiate_node(grid_start, 0)
         self.current_state = data.pose
 
     def make_grid(self, data):
-        self.grid = data.data
         self.gridinfo = data.info
         self.size_row = self.gridinfo.height
         self.size_col = self.gridinfo.width
-
+        self.grid = [[None for i in range(self.size_col)] for j in range(self.size_row)]
+        self.grid_node = [[None for i in range(self.size_col)] for j in range(self.size_row)]
         for row in range(self.size_row):
+            self.grid[row] = data.data[0+self.size_col*row:self.size_col*(row+1)]
             for col in range(self.size_col):
-                self.grid_node[row][col] = self.instantiate_node((row, col), self.gridinfo[row][col])
+                self.grid_node[row][col] = self.instantiate_node((row, col), self.grid[row][col])
+    
 
     def make_dynamicGrid(self, data):
-        self.dynamic_grid = data.data
         self.dynamic_gridinfo = data.info
         self.dynamic_row = self.gridinfo.height
         self.dynamic_col = self.gridinfo.width
+        self.dynamic_grid = [[None for i in range(self.dynamic_col)] for j in range(self.dynamic_row)]
+        for row in range(self.dynamic_row):
+            self.dynamic_grid[row] = data.data[self.dynamic_col*row:self.dynamic_col*(row+1)]
 
     def grid2dynamic(self, point):
         '''need to align the dynamic sensor occupancy grid with the world occupancy grid
@@ -143,8 +151,12 @@ class DStar:
         origin = [self.gridinfo.origin.position.x, self.gridinfo.origin.position.y]
         resolution = self.gridinfo.resolution
 
-        row = (point[1] - origin[1])/resolution
-        col = (point[0] - origin[0])/resolution
+        if resolution:
+            row = (point[1] - origin[1])/resolution
+            col = (point[0] - origin[0])/resolution
+        else:
+            row = 1000000000
+            col = 1000000000
         return [int(row), int(col)]
     
     def grid2global(self, point):
@@ -152,9 +164,12 @@ class DStar:
         '''
         origin = [self.gridinfo.origin.position.x, self.gridinfo.origin.position.y]
         resolution = self.gridinfo.resolution
-
-        row = point.row*resolution + origin[1]
-        col = point.col*resolution + origin[0]
+        if resolution:
+            row = point.row*resolution + origin[1]
+            col = point.col*resolution + origin[0]
+        else: 
+            row = 100000000
+            col = 100000000
         return [row, col]
 
 
@@ -407,6 +422,8 @@ class DStar:
             modify the cost and replan in the new map
         '''
 
+        self.stopRobot()
+
         # Search from goal to start with the pre-known map
         current_goal = self.goal
         self.insert(self.goal, 0)
@@ -484,8 +501,7 @@ class DStar:
             robot_cmd.angular.x = 0.0
             robot_cmd.angular.y = 0.0
             robot_cmd.angular.z = ang_vel
-
-            self.velPub(robot_cmd)
+            self.velPub.publish(robot_cmd)
     
 
     
@@ -511,11 +527,13 @@ class DStar:
 
 if __name__ == "__main__":
 
-    rospy.logwarn("made it here")
+    rospy.init_node('d_star')
+   
     # TODO: adjust dynamic grid to be sensor values
     # Search
     d_star = DStar()
 
     # Run D*
-    d_star.run()
+    while not rospy.is_shutdown or 1:
+        d_star.run()
     print("test")
