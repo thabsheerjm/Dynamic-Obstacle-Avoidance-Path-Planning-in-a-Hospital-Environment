@@ -50,6 +50,7 @@ class DStar:
         # Maps
         self.grid = grid  # the pre-known grid map
         self.gridinfo = MapMetaData()
+        self.resolution_mod = 3.0
 
         self.dynamic_grid = dynamic_grid  # the actual grid map (with dynamic obstacles)
         self.dynamic_gridinfo = None
@@ -77,7 +78,14 @@ class DStar:
         # Result
         self.path = []
         self.ros_path = Path()
-        self.path_list = []
+        self.path_list = [PoseStamped()]
+
+        # cut down on the grid and only look at a middle square
+        self.row_min = 10 # 280
+        self.row_max = 90 # 615
+        self.col_min = 10
+        self.col_max = 90
+        
 
     def update_goal(self, data):
         '''subscriber function to get the goal
@@ -87,10 +95,15 @@ class DStar:
         rospy.logwarn("in the grid coordinates it is at:")
         (row, col) = self.global2grid((data.pose.position.x, data.pose.position.y))
         grid_goal = [row, col]
-        self.goal = self.grid_node[grid_goal[0]][grid_goal[1]]
-        self.goal_pose = data.pose
-
         rospy.loginfo(grid_goal)
+
+        if (row < len(self.grid_node) and col < len(self.grid_node[0])):
+            self.goal = self.grid_node[grid_goal[0]][grid_goal[1]]
+        else:
+            rospy.logwarn("The grid is not big enough, the goal was not chosen right")
+            self.goal = self.grid_node[0][0]
+        self.goal_pose = data.pose
+        
         # reset the path and the checked nodes
         self.path = []
         self.open = set()
@@ -131,15 +144,23 @@ class DStar:
         rospy.loginfo("UPDATING GRID")
 
         self.gridinfo = data.info
-        self.size_row = self.gridinfo.height
-        self.size_col = self.gridinfo.width
+        # rospy.loginfo(self.gridinfo)
+
+        original_height = self.gridinfo.height
+        original_width = self.gridinfo.width
+        self.size_row = int(self.gridinfo.height/self.resolution_mod)
+        self.size_col = int(self.gridinfo.width/self.resolution_mod)
+        self.gridinfo.resolution = self.gridinfo.resolution*self.resolution_mod*self.resolution_mod
+
         self.grid = [[None for i in range(self.size_col)] for j in range(self.size_row)]
         self.grid_node = [[None for i in range(self.size_col)] for j in range(self.size_row)]
-        
+
         for row in range(self.size_row):
-            self.grid[row] = data.data[self.size_col*row:self.size_col*(row+1)]
+            self.grid[row] = data.data[int(self.size_col*(row*self.resolution_mod)):int(self.size_col*((row*self.resolution_mod)+1))]
             for col in range(self.size_col):
                 self.grid_node[row][col] = self.instantiate_node((row, col), self.grid[row][col])
+    
+        rospy.loginfo("grid made :D")
     
 
     def make_dynamicGrid(self, data):
@@ -186,13 +207,14 @@ class DStar:
         '''
         origin = [self.gridinfo.origin.position.x, self.gridinfo.origin.position.y]
         resolution = self.gridinfo.resolution
+
         if resolution:
             row = point.row*resolution + origin[1]
             col = point.col*resolution + origin[0]
         else: 
             row = 100000000
             col = 100000000
-        return [row, col]
+        return [col, row]
 
 
     def instantiate_node(self, point, val):
@@ -271,9 +293,8 @@ class DStar:
                 # Do not append the same node
                 if i == 0 and j == 0:
                     continue
-
-                neighbors.append(self.grid_node[row + i][col + j])
-
+                if (self.row_min < row < self.row_max) and (self.col_min < col < self.col_max):
+                    neighbors.append(self.grid_node[row + i][col + j])
         return neighbors
 
     def cost(self, node1, node2):
@@ -457,13 +478,15 @@ class DStar:
 
         # Process until open set is empty or start is reached
         while self.open and current_goal == self.goal:
+            # rospy.loginfo(len(self.open))
             # using self.process_state()
             self.process_state()
 
-        rospy.loginfo("FOUND A PATH!!!!!")
+        rospy.loginfo("FOUND A PATH!!!!")
         # Visualize the first path if found
         self.get_backpointer_list(self.start)
-        
+        rospy.loginfo("path visualized")
+
         if self.path == []:
             rospy.logwarn("NO PATH! :(")
             print("No path is found")
@@ -489,7 +512,7 @@ class DStar:
             #      current_state.parent.row, ")")
 
             # for visualizing and move here
-            self.move_robot(current_node)
+            # self.move_robot(current_node)
             current_node = current_node.parent
 
 
@@ -546,13 +569,13 @@ class DStar:
                 not cur_node.is_obs:
             # trace back
             cur_node = cur_node.parent
-            point2 = [cur_node.row, cur_node.col]
-            
-            heading = math.atan2(point1[1]-point2[1], point1[0]-point2[0])
-            current_pose = self.make_pose(node.row, node.col, heading)
-            point1 = point2
-            self.path_list.append(current_pose)
-
+            if cur_node != None:
+                point2 = [cur_node.row, cur_node.col]
+                heading = math.atan2(point1[1]-point2[1], point1[0]-point2[0])
+                path_point = self.grid2global(cur_node)
+                current_pose = self.make_pose(path_point[0], path_point[1], heading)
+                point1 = point2
+                self.path_list.append(current_pose)
             # add to path
             self.path.append(cur_node)
 
@@ -562,10 +585,22 @@ class DStar:
             self.ros_path.poses = []
         
         if cur_node == self.goal:
+            goal_stamped = PoseStamped()
             current_pose = self.goal_pose
-            self.path_list.append(current_pose)
+            goal_stamped.header.frame_id = "map"
+            goal_stamped.header.seq = 0
+            goal_stamped.header.stamp.secs = 0
+            goal_stamped.header.stamp.nsecs = 0
+            goal_stamped.pose = current_pose
+
+            self.path_list.append(goal_stamped)
+        
             self.ros_path.poses = self.path_list
-            
+            self.ros_path.header.frame_id = "map"
+            self.ros_path.header.seq = 0
+            self.ros_path.header.stamp.secs = 0
+            self.ros_path.header.stamp.nsecs = 0
+
             self.pathPub.publish(self.ros_path)
 
 
@@ -579,7 +614,13 @@ class DStar:
         ros_pose.orientation.y = yy
         ros_pose.orientation.z = zz
         ros_pose.orientation.w = ww
-        return ros_pose
+        stamped = PoseStamped()
+        stamped.pose = ros_pose
+        stamped.header.frame_id = "map"
+        stamped.header.seq = 0
+        stamped.header.stamp.secs = 0
+        stamped.header.stamp.nsecs = 0
+        return stamped
 
 
 if __name__ == "__main__":
