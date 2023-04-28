@@ -82,7 +82,7 @@ class PRM:
             self.sampling_coords = np.array([])
             self.graph = Graph()
 
-        plt.savefig("./results/final_path.png")
+        plt.savefig("./results/final_path.png") #change this path to your desired location
         plt.show()
 
     def samplingCoords(self):
@@ -158,8 +158,8 @@ class PRM:
         pointsToEnd = [self.findPoints(path)
                        for path in end_path]
         print("Path Found !!!")
-        print("Coordinates saved in results/data.csv")
-        CSVFile_path = "./results/data.csv"
+        print("Coordinates saved in results/data.csv") 
+        CSVFile_path = "./results/data.csv" #change this path to your desired location
         header = [['x', 'y']]
         with open(CSVFile_path, 'w', encoding='UTF8', newline='') as f:
             writer = csv.writer(f)
