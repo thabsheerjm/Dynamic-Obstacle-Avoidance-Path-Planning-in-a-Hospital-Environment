@@ -7,7 +7,7 @@ import csv
 import numpy as np
 from PIL import Image as im
 
-
+#TODO: set variable input to switch between topics
 
 class MapMaker:
     def __init__(self, resolution_mod):

@@ -30,16 +30,20 @@ if __name__ == "__main__":
     # Load the map
     # print(os.getcwd())
     scale = 2
-    grid, start, goal = load_map('src/PathPlanning/path_planning/src/2d_imp/hospital'+ str(scale) + '.csv')
-    dynamic_grid, _, _ = load_map('src/PathPlanning/path_planning/src/2d_imp/hospital'+ str(scale) + '.csv')
+    #grid, start, goal = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/hospital'+ str(scale) + '.csv')
+    #dynamic_grid, _, _ = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/hospital'+ str(scale) + '.csv')
 
+    # smaller maps
+    grid, start, goal = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/map1.csv')
+    dynamic_grid, _, _ = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/unknown_map1.csv')
+    is_dynamic = True
     # Search
-    d_star = DStar(grid, dynamic_grid, start, goal)
+    d_star = DStar(grid, dynamic_grid, start, goal, is_dynamic)
     print("initialized, making map")
-
+        
     # Visualize the map
     # d_star.draw_path(grid, "static map")
-    # d_star.draw_path(dynamic_grid, "dynamic map")
+
     print("map made (or skipped), running D*")
     # Run D*
     d_star.run()

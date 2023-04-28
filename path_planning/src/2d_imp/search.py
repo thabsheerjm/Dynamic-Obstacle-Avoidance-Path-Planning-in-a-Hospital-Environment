@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 import math
+import csv
 
 
 # Class for each node in the grid
@@ -11,13 +12,13 @@ class Node:
         self.is_obs = is_obs  # obstacle?
         self.is_dy_obs = is_dy_obs  # dynamic obstacle?
         self.tag = "NEW"  # tag ("NEW", "OPEN", "CLOSED")
-        self.h = 100000000  # cost to goal (NOT heuristic)
-        self.k = 100000000    # best h
+        self.h = 100000000000 # cost to goal (NOT heuristic)
+        self.k = 100000000000    # best h
         self.parent = None  # parent node
 
 
 class DStar:
-    def __init__(self, grid, dynamic_grid, start, goal):
+    def __init__(self, grid, dynamic_grid, start, goal, is_dynamic):
         # Maps
         self.grid = grid  # the pre-known grid map
         self.dynamic_grid = dynamic_grid  # the actual grid map (with dynamic obstacles)
@@ -39,6 +40,8 @@ class DStar:
 
         # Result
         self.path = []
+
+        self.is_dynamic = is_dynamic
 
     def instantiate_node(self, point):
         ''' Instatiate a node given point (x, y) '''
@@ -89,7 +92,9 @@ class DStar:
         row = node.row
         col = node.col
         neighbors = []
-        # All the 8 neighbors
+        # All the 8 neighbors -> (-1, 2)
+
+        # look at more neighbors
         for i in range(-1, 2):
             for j in range(-1, 2):
                 # Check range
@@ -103,6 +108,29 @@ class DStar:
                 neighbors.append(self.grid_node[row + i][col + j])
 
         return neighbors
+    
+    def get_sensor_neighbors(self, node):
+        ''' Get neighbors of a node with 8 connectivity '''
+        row = node.row
+        col = node.col
+        neighbors = []
+        # All the 8 neighbors -> (-1, 2)
+
+        # look at more neighbors
+        for i in range(-2, 3):
+            for j in range(-2, 3):
+                # Check range
+                if row + i < 0 or row + i >= len(self.grid) or \
+                        col + j < 0 or col + j >= len(self.grid[0]):
+                    continue
+                # Do not append the same node
+                if i == 0 and j == 0:
+                    continue
+
+                neighbors.append(self.grid_node[row + i][col + j])
+
+        return neighbors
+
 
     def cost(self, node1, node2):
         ''' Euclidean distance from one node to another 
@@ -113,7 +141,7 @@ class DStar:
         '''
         # If any of the node is an obstacle
         if node1.is_obs or node2.is_obs:
-            return 100000000
+            return 100000000000
         # Euclidean distance
         a = node1.row - node2.row
         b = node1.col - node2.col
@@ -184,7 +212,7 @@ class DStar:
 
         k_min = 0
         h_y = node.h
-        while self.open and k_min < h_y and k_min is not 100000000:
+        while self.open and k_min < h_y and k_min is not 100000000000:
             k_min = self.process_state()
 
         if self.open:
@@ -199,7 +227,6 @@ class DStar:
 
         # Change the cost from the dynamic obstacle node to the affected node
         # by setting the obstacle_node.is_obs to True (see self.cost())
-        obstacle_node.is_obs = True
 
         # Im going to check if the goal is surrounded
         # kept getting an infinite loop in the path repair
@@ -211,7 +238,7 @@ class DStar:
         # if the goal is surrounded the minimum k should be infinity because they all go through an obstacle
         if surrounded:
             print("Goal is blocked off, no path possible")
-            return 100000000
+            return 100000000000
 
         # Put the obstacle node and the neighbor node back to Open list
         obstacle_h = self.cost(obstacle_node, obstacle_node.parent) + obstacle_node.parent.k
@@ -229,13 +256,21 @@ class DStar:
             the cost from the adjacent node to the dynamic obstacle node should be modified
         '''
         # Sense the neighbors to see if they are new obstacles
-        neighbors = self.get_neighbors(node)
+        neighbors = self.get_sensor_neighbors(node)
 
         for near in neighbors:
+            near.is_dy_obs = not self.dynamic_grid[near.row][near.col]
             # If neighbor.is_dy_obs == True but neighbor.is_obs == Flase,
+            
+            # neighbor is a moving obstacle that is not there anymore
+            if near.is_obs and not near.is_dy_obs:
+                near.is_obs = False
+                self.modify_cost(near, node)
+
             # the neighbor is a new dynamic obstacle
             if near.is_dy_obs and not near.is_obs:
                 print("neighbor is new dynamic obstacle")
+                near.is_obs = True
                 # Modify the cost from this neighbor node to all this neighbor's neighbors
                 # using self.modify_cost
                 self.modify_cost(near, node)
@@ -284,6 +319,10 @@ class DStar:
         if self.path == []:
             print("No path is found")
             return
+        
+        step = 0
+        if self.is_dynamic:
+            self.dynamic_grid = self.get_dyn_map(step)
 
         for setpoint in self.path:
             if not setpoint.is_dy_obs:
@@ -291,6 +330,10 @@ class DStar:
         # Start from start to goal
         # Update the path if there is any change in the map
         while current_state is not self.goal:
+            # update its sensor values
+            step += 1
+            self.dynamic_grid = self.get_dyn_map(step)
+
             # Check if any repair needs to be done
             # using self.prepare_repair
             self.prepare_repair(current_state)
@@ -313,7 +356,7 @@ class DStar:
 
             # Get the next node to continue
             current_state = current_state.parent
-
+            
     def get_backpointer_list(self, node):
         ''' Keep tracing back to get the path from a given node to goal '''
         # Assume there is a path from start to goal
@@ -330,6 +373,29 @@ class DStar:
         # If there is not such a path
         if cur_node != self.goal:
             self.path = []
+
+    def get_dyn_map(self, index):
+        index = index%8
+        file_path = 'src/PathPlanning/path_planning/src/2d_imp/maps/dynamic_maps/dynamic'+ str(index) + '_map1.csv'
+        grid = []
+        start = [0, 0]
+        goal = [0, 0]
+        # Load from the file
+        with open(file_path, 'r') as map_file:
+            reader = csv.reader(map_file)
+            for i, row in enumerate(reader):
+                # load start and goal point
+                if i == 0:
+                    start[0] = int(row[1])
+                    start[1] = int(row[2])
+                elif i == 1:
+                    goal[0] = int(row[1])
+                    goal[1] = int(row[2])
+                # load the map
+                else:
+                    int_row = [int(col) for col in row]
+                    grid.append(int_row)
+        return grid
 
     def draw_path(self, grid, title="Path"):
         '''Visualization of the found path using matplotlib'''

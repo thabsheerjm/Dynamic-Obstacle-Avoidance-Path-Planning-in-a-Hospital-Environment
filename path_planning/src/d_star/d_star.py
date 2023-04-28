@@ -6,7 +6,8 @@ from nav_msgs.msg import OccupancyGrid, Path, MapMetaData
 
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 import math
-
+#TODO: check if start sub is reseting path and/or open -> look in all subs
+#TODO: to debug maybe print the grid to something else
 
 # Class for each node in the grid
 class Node:
