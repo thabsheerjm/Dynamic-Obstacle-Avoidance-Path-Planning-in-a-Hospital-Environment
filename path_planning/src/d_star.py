@@ -28,29 +28,11 @@ class DStar:
         # (make the subscribers update each thing in the handlers)
         
         rospy.loginfo("initializing d*") 
-        rospy.loginfo("setting up subscribers")   
-
-        #subscribers
-        # /gopher_presence/move_base/global_costmap/costmap --> grid (OccupancyGrid)
-        rospy.Subscriber("/gopher_presence/move_base/global_costmap/costmap", OccupancyGrid, self.make_grid)
-        # /gopher_presence/move_base/local_costmap/costmap --> dynamic_grid (OccupancyGrid)
-        # rospy.Subscriber("/gopher_presence/move_base/local_costmap/costmap", OccupancyGrid, self.make_dynamicGrid)
-        # /model_pose # Pose Stamped (start/current state)
-        rospy.Subscriber("/model_pose", PoseStamped, self.update_start)
-
-        rospy.Subscriber("/gopher_presence/move_base_simple/goal", PoseStamped, self.update_goal)
-
-        rospy.loginfo("setting up publishers")
-        # /gopher_presence/move_base/TrajectoryPlannerROS/global_plan (copy for visualization, Path)
-        self.pathPub = rospy.Publisher('/gopher_presence/d_star/path', Path, queue_size=10)
-        # /gopher_presence/base_controller/cmd_vel (twist)
-        self.velPub = rospy.Publisher('/gopher_presence/base_controller/cmd_vel', Twist, queue_size= 10)
-        self.movebase_pathpub = rospy.Publisher('/gopher_presence/move_base/TrajectoryPlannerROS/global_plan', Path, queue_size=10)
 
         # Maps
         self.grid = grid  # the pre-known grid map
         self.gridinfo = MapMetaData()
-        self.resolution_mod = 3.0
+        self.resolution_mod = 2.0
 
         self.dynamic_grid = dynamic_grid  # the actual grid map (with dynamic obstacles)
         self.dynamic_gridinfo = None
@@ -81,10 +63,33 @@ class DStar:
         self.path_list = [PoseStamped()]
 
         # cut down on the grid and only look at a middle square
-        self.row_min = 10 # 280
-        self.row_max = 90 # 615
-        self.col_min = 10
-        self.col_max = 90
+        # for 3,  min 30, max 70 for both
+        # for 2, min 70 (row), 100 (col), max 155 both
+        self.row_min = 270/(self.resolution_mod*self.resolution_mod) # 280
+        self.row_max = 630/(self.resolution_mod*self.resolution_mod) # 615
+        self.col_min = 270/(self.resolution_mod*self.resolution_mod)
+        self.col_max = 630/(self.resolution_mod*self.resolution_mod)
+
+        ############################################ ROS THINGS ###############################
+
+        rospy.loginfo("setting up subscribers")   
+
+        #subscribers
+        # /gopher_presence/move_base/global_costmap/costmap --> grid (OccupancyGrid)
+        rospy.Subscriber("/gopher_presence/move_base/global_costmap/costmap", OccupancyGrid, self.make_grid)
+        # /gopher_presence/move_base/local_costmap/costmap --> dynamic_grid (OccupancyGrid)
+        # rospy.Subscriber("/gopher_presence/move_base/local_costmap/costmap", OccupancyGrid, self.make_dynamicGrid)
+        # /model_pose # Pose Stamped (start/current state)
+        rospy.Subscriber("/model_pose", PoseStamped, self.update_start)
+
+        rospy.Subscriber("/gopher_presence/move_base_simple/goal", PoseStamped, self.update_goal)
+
+        rospy.loginfo("setting up publishers")
+        # /gopher_presence/move_base/TrajectoryPlannerROS/global_plan (copy for visualization, Path)
+        self.pathPub = rospy.Publisher('/gopher_presence/d_star/path', Path, queue_size=10)
+        # /gopher_presence/base_controller/cmd_vel (twist)
+        self.velPub = rospy.Publisher('/gopher_presence/base_controller/cmd_vel', Twist, queue_size= 10)
+        self.movebase_pathpub = rospy.Publisher('/gopher_presence/move_base/TrajectoryPlannerROS/global_plan', Path, queue_size=10)
         
 
     def update_goal(self, data):
@@ -128,9 +133,11 @@ class DStar:
         ''' subcriber function attached to /model_pose
             PoseStamped, in gobal coordinate frame 
         '''
+        old_start = self.global2grid((self.current_state.position.x, self.current_state.position.y))
         grid_start = self.global2grid((data.pose.position.x, data.pose.position.y))
         # rospy.logwarn("looking for start, the grid size is: " + str(len(self.grid_node)) + " by " + str(len(self.grid_node[0])))
-        # rospy.logwarn("start at coord "+ str(grid_start))
+        if old_start != grid_start:
+            rospy.logwarn("start at coord "+ str(grid_start))
         # rospy.logwarn(self.grid_node)
     
         if ( len(self.grid_node) > grid_start[0]) and (len(self.grid_node[0]) > grid_start[1]):
@@ -152,15 +159,64 @@ class DStar:
         self.size_col = int(self.gridinfo.width/self.resolution_mod)
         self.gridinfo.resolution = self.gridinfo.resolution*self.resolution_mod*self.resolution_mod
 
-        self.grid = [[None for i in range(self.size_col)] for j in range(self.size_row)]
+        self.grid = [[None for i in range(original_width)] for j in range(original_height)]
         self.grid_node = [[None for i in range(self.size_col)] for j in range(self.size_row)]
 
-        for row in range(self.size_row):
-            self.grid[row] = data.data[int(self.size_col*(row*self.resolution_mod)):int(self.size_col*((row*self.resolution_mod)+1))]
-            for col in range(self.size_col):
-                self.grid_node[row][col] = self.instantiate_node((row, col), self.grid[row][col])
+        for row in range(original_height):
+                # rospy.loginfo("read up to row " + str(row))
+                self.grid[row] = data.data[int(original_width*row):int(original_width*(row+1)-1)]
+
+        simple_grid = self.simplify_map(self.grid, self.resolution_mod, len(self.grid), len(self.grid[0]))
+
+        for row in range(len(simple_grid)):
+            for col in range(len(simple_grid[0])):
+                self.grid_node[row][col] = self.instantiate_node((row, col), simple_grid[row][col])
     
         rospy.loginfo("grid made :D")
+
+
+    def simplify_map(self, grid, resolution, size_row, size_col):
+
+        new_row_size = int(len(grid)/resolution)
+        new_col_size = int(len(grid[0])/resolution)
+
+        rospy.loginfo("new height is " + str(new_row_size))
+        rospy.loginfo("new width is " + str(new_col_size))
+
+        simple_grid = [[None for i in range(new_col_size)] for j in range(new_row_size)]
+
+        # rospy.logwarn("length of the grid data is :")
+        # rospy.loginfo(len(simple_grid))
+        # rospy.logwarn("height is :")
+        # rospy.loginfo(len(simple_grid[0]))
+
+
+        for row in range(new_row_size):
+            for col in range(new_col_size):
+                # rospy.loginfo("made it to :" + str(row) + ", " + str(col))
+                simple_grid[row][col] = self.get_value(row, col, grid, resolution)
+
+        return simple_grid
+         
+    def get_value(self, row, col, grid, resolution):
+        new_row = int(row*resolution)
+        new_col = int(col*resolution)
+        obstacle_threshold = 90
+        neighbor_math = []
+
+        for i in range(int(resolution)):
+            for j in range(int(resolution)):
+                if i != 0 and j !=0:
+                    neighbor_math.append([i, j])
+        
+        if grid[new_row][new_col] > obstacle_threshold:
+            return 0
+        
+        for mod in neighbor_math:
+            if grid[new_row+mod[0]][new_col+mod[1]] > obstacle_threshold:
+                return 0
+        
+        return 1
     
 
     def make_dynamicGrid(self, data):
@@ -231,7 +287,7 @@ class DStar:
         else:
             dynamic_object = False  
 
-        if val > 50 or val == -1:
+        if val == 1 or val == -1:
             node = Node(row, col, True,
                         dynamic_object, val)
         else:

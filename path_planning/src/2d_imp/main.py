@@ -1,0 +1,45 @@
+import csv
+# import os
+from search import DStar
+
+
+# Load map, start and goal point.
+def load_map(file_path):
+    grid = []
+    start = [0, 0]
+    goal = [0, 0]
+    # Load from the file
+    with open(file_path, 'r') as map_file:
+        reader = csv.reader(map_file)
+        for i, row in enumerate(reader):
+            # load start and goal point
+            if i == 0:
+                start[0] = int(row[1])
+                start[1] = int(row[2])
+            elif i == 1:
+                goal[0] = int(row[1])
+                goal[1] = int(row[2])
+            # load the map
+            else:
+                int_row = [int(col) for col in row]
+                grid.append(int_row)
+    return grid, start, goal
+
+
+if __name__ == "__main__":
+    # Load the map
+    # print(os.getcwd())
+    scale = 2
+    grid, start, goal = load_map('src/PathPlanning/path_planning/src/2d_imp/hospital'+ str(scale) + '.csv')
+    dynamic_grid, _, _ = load_map('src/PathPlanning/path_planning/src/2d_imp/hospital'+ str(scale) + '.csv')
+
+    # Search
+    d_star = DStar(grid, dynamic_grid, start, goal)
+    print("initialized, making map")
+
+    # Visualize the map
+    # d_star.draw_path(grid, "static map")
+    # d_star.draw_path(dynamic_grid, "dynamic map")
+    print("map made (or skipped), running D*")
+    # Run D*
+    d_star.run()
