@@ -10,10 +10,13 @@ from PIL import Image as im
 #TODO: set variable input to switch between topics
 
 class MapMaker:
-    def __init__(self, resolution_mod):
+    def __init__(self, resolution_mod, cspace):
+        self.cspace = cspace
         self.resolution_mod = resolution_mod
-        # rospy.Subscriber("/gopher_presence/move_base/global_costmap/costmap", OccupancyGrid, self.make_grid)
-        rospy.Subscriber("/map", OccupancyGrid, self.make_grid)
+        if cspace:
+            rospy.Subscriber("/gopher_presence/move_base/global_costmap/costmap", OccupancyGrid, self.make_grid)
+        else:
+            rospy.Subscriber("/map", OccupancyGrid, self.make_grid)
 
 
     def make_grid(self, data):
@@ -50,8 +53,12 @@ class MapMaker:
 
             rospy.loginfo("grid made :D")
             rospy.loginfo("outputing to csv")
+            if self.cspace:
+                fname = "src/PathPlanning/path_planning/src/2d_imp/maps/hospital" + str(self.resolution_mod) + ".csv"
+            else:
+                fname = "src/PathPlanning/path_planning/src/2d_imp/maps/hospital" + str(self.resolution_mod) + "_nocspace.csv"
 
-            with open("src/PathPlanning/path_planning/src/2d_imp/hospital" + str(self.resolution_mod) +".csv","w+") as my_csv:
+            with open(fname,"w+") as my_csv:
                 csvWriter = csv.writer(my_csv,delimiter=',')
                 start = [455, 575] # for a resolution of 1
                 start = [int(start[0]/self.resolution_mod), int(start[1]/self.resolution_mod)]
@@ -112,10 +119,12 @@ if __name__ == "__main__":
     rospy.init_node('cartographer', anonymous=True)
     rospy.logwarn("Cartographer is setting up his station")
     # Load the map
-    map_scale = 1
+    map_scale = 10
     rospy.loginfo("making a map that is 1:"+ str(map_scale*map_scale))
     rospy.loginfo("(1 csv grid block is " + str(map_scale*map_scale) +  " occupancy grid blocks)")
-    cartographer = MapMaker(map_scale)
+
+    with_cspace = False
+    cartographer = MapMaker(map_scale, with_cspace)
 
     rospy.spin()
 

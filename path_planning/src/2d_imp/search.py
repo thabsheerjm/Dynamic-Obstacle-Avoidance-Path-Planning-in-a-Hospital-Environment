@@ -374,9 +374,11 @@ class DStar:
         if cur_node != self.goal:
             self.path = []
 
+################################################## dynamic map things #############################
     def get_dyn_map(self, index):
-        index = index%8
-        file_path = 'src/PathPlanning/path_planning/src/2d_imp/maps/dynamic_maps/dynamic'+ str(index) + '_map1.csv'
+        # hand made these dynamic maps so just fix it for the application 
+        index = index%35
+        file_path = 'src/PathPlanning/path_planning/src/2d_imp/maps/dynamic_maps/hospital10_nocspace_dynamic'+ str(index) + '.csv'
         grid = []
         start = [0, 0]
         goal = [0, 0]

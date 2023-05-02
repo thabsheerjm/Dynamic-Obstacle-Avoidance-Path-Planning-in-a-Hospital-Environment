@@ -29,21 +29,33 @@ def load_map(file_path):
 if __name__ == "__main__":
     # Load the map
     # print(os.getcwd())
-    scale = 2
-    #grid, start, goal = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/hospital'+ str(scale) + '.csv')
-    #dynamic_grid, _, _ = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/hospital'+ str(scale) + '.csv')
+    scale = 10
+    cspace = False
+    show_static_map = True
+
+    if cspace:
+        grid, start, goal = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/hospital'+ str(scale) + '.csv')
+        dynamic_grid, _, _ = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/hospital'+ str(scale) + '.csv')
+    else:
+        grid, start, goal = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/hospital'+ str(scale) + '_nocspace.csv')
+        dynamic_grid, _, _ = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/hospital'+ str(scale) + '_nocspace.csv')
+
+    grid, _, _ = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/dynamic_maps/hospital10_nocspace_dynamic34.csv')
 
     # smaller maps
-    grid, start, goal = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/map1.csv')
-    dynamic_grid, _, _ = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/unknown_map1.csv')
+    #grid, start, goal = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/map1.csv')
+    #dynamic_grid, _, _ = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/unknown_map1.csv')
     is_dynamic = True
     # Search
     d_star = DStar(grid, dynamic_grid, start, goal, is_dynamic)
     print("initialized, making map")
         
     # Visualize the map
-    # d_star.draw_path(grid, "static map")
-
-    print("map made (or skipped), running D*")
+    if show_static_map:
+        d_star.draw_path(grid, "static map x")
+        print("map made, running D*")
+    else:
+        print("running D*")
+        
     # Run D*
-    d_star.run()
+    # d_star.run()
