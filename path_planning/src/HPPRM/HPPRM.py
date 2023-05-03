@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import cv2
 from decimal import Decimal
 import csv
+import shapely.geometry
+import matplotlib.pyplot as plt
 from sklearn.neighbors import NearestNeighbors
 from .Dijkstra import Graph, dijkstra, to_array
 
@@ -10,6 +12,7 @@ class APF:
     def __init__(self, influence_coefficient, repulsion_range):
         self.influence_coefficient = influence_coefficient
         self.repulsion_range = repulsion_range
+        # self.limit = limit
 
     def repulsive_potential(self, x, y, ox, oy):
         id = -1
@@ -45,6 +48,8 @@ class APF:
                     white_reg.append([i, j])
 
         for i, j in enumerate(white_reg):
+            if sampling_points >= 2000:
+                break
             rep = self.repulsive_potential(
                 j[0], j[1], obs_x, obs_y)
             if rep > 1:
@@ -82,7 +87,7 @@ class PRM:
             self.sampling_coords = np.array([])
             self.graph = Graph()
 
-        plt.savefig("./results/final_path.png") #change this path to your desired location
+        plt.savefig("./results/final_path.png")
         plt.show()
 
     def samplingCoords(self):
@@ -115,6 +120,7 @@ class PRM:
                 self.collisionFreePoints = np.vstack(
                     [self.collisionFreePoints, point])
         self.plotSamplingPoints(self.collisionFreePoints)
+        return self.collisionFreePoints
 
     def nearestNeighbour(self, k=5):
         X = self.collisionFreePoints
@@ -140,7 +146,6 @@ class PRM:
         self.endNode = str(self.nodeIdx(self.goal))
 
         dist, prev = dijkstra(self.graph, self.startNode)
-
         end_path = to_array(prev, self.endNode)
 
         if(len(end_path) > 1):
@@ -158,14 +163,15 @@ class PRM:
         pointsToEnd = [self.findPoints(path)
                        for path in end_path]
         print("Path Found !!!")
-        print("Coordinates saved in results/data.csv") 
-        CSVFile_path = "./results/data.csv" #change this path to your desired location
+        print("Coordinates saved in results/data.csv")
+        print(len(end_path))
+        CSVFile_path = "./results/data.csv"
         header = [['x', 'y']]
         with open(CSVFile_path, 'w', encoding='UTF8', newline='') as f:
             writer = csv.writer(f)
             writer.writerows(header)
             writer.writerows(pointsToEnd)
-
+        return end_path
     def nodeIdx(self, pt):
         return np.where((self.collisionFreePoints == pt).all(axis=1))[0][0]
 
@@ -202,16 +208,16 @@ class Utils:
         fig.canvas.draw()
 
     def initializeMap(self):
-        thresh = 170
-        # gImg = cv2.cvtColor(self.occupancy_grid_map , cv2.COLOR_BGR2GRAY )
-        im_bw = cv2.adaptiveThreshold(
+        thresh = 127
+        im_bw = cv2.threshold(
             self.occupancy_grid_map,
             thresh,
             255,
-            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv2.THRESH_BINARY, 31,1)[1]
+            cv2.THRESH_BINARY)[1]
         kernel = np.ones((3, 3), np.uint8)
         im_bw = cv2.erode(im_bw, kernel, iterations=1)
         im_bw = cv2.copyMakeBorder(
             im_bw, 3, 3, 3, 3, cv2.BORDER_CONSTANT, value=0)
         self.map_inflated = cv2.rotate(im_bw, cv2.ROTATE_90_CLOCKWISE)
+
+

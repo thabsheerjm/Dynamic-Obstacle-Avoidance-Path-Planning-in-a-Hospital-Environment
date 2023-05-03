@@ -41,13 +41,14 @@ def min_dist(q, dist):
     return min_node
 
 
-INFINITY = float('Infinity')
+# INFINITY = float('Infinity')
 
 
 def dijkstra(graph, source):
     q = set()
     dist = {}
     prev = {}
+    INFINITY = float('Infinity')
 
     for v in graph.nodes:       # initialization
         dist[v] = INFINITY      # unknown distance from source to v
@@ -81,7 +82,7 @@ def to_array(prev, from_node):
     """Creates an ordered list of labels as a route."""
     previous_node = prev[from_node]
     route = [from_node]
-
+    INFINITY = float('Infinity')
     while previous_node != INFINITY:
         route.append(previous_node)
         temp = previous_node
