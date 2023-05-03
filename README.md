@@ -16,10 +16,10 @@ For this project, we have tested out out three different planning algorithms, na
  In the d2_imp folder:  
   
 The D* toy problem is run in main.py of the 2d_imp folder   
-	parameters:  
-	&nbsp;	scale - how much the map is scaled from the unity resolution of 0.05m/grid square  
-	&nbsp;	cspace - true to pull the map from move_base/global_costmap, false to get the /map csv's (scale 3 and up lose doorways with cspace as true)  
-	&nbsp;	show_static_map - visualization bool for the starting orientation  
+   *parameters:*  
+       &nbsp;	scale - how much the map is scaled from the unity resolution of 0.05m/grid square  
+       &nbsp;	cspace - true to pull the map from move_base/global_costmap, false to get the /map csv's (scale 3 and up lose doorways with cspace as true)  
+       &nbsp;	show_static_map - visualization bool for the starting orientation  
 		is_dynamic - set as True to use the dynamic maps (only works for scale 10 as I had to manually alter the csvs)  
   
 To run adjust the parameters and run main.py. The maps need to stay in the same path location (in the ros node PathPlanning) or alter the file paths in lines 40-44 to reflect the correct path.   
@@ -30,7 +30,7 @@ The map generator requires unity and ROS to be running becasue it pulls the maps
 roslaunch gopher_unity_endpoint gopher_presence.launch  
 rosrun path_planning generate_maps.py  
 ```
-parameters:  
+*parameters:*  
    &nbsp;  map_scale - how much the map is scaled from the hospitals 0.05m/grid  
    &nbsp;  with_cspace - adjust which message the node recieves the map from, /map or /move_base/global_costmap  
 			  
