@@ -29,8 +29,11 @@ def load_map(file_path):
 if __name__ == "__main__":
     # Load the map
     # print(os.getcwd())
-    scale = 10
+    #scale factor it is 0.05m/grid * scale
+    scale = 2
+    # any scale above 3 loses doorways with cspace
     cspace = False
+    # visualization
     show_static_map = True
 
     if cspace:
@@ -40,22 +43,25 @@ if __name__ == "__main__":
         grid, start, goal = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/hospital'+ str(scale) + '_nocspace.csv')
         dynamic_grid, _, _ = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/hospital'+ str(scale) + '_nocspace.csv')
 
-    grid, _, _ = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/dynamic_maps/hospital10_nocspace_dynamic34.csv')
+    # used to see what the dynamic obstacles look like
+    # grid, _, _ = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/dynamic_maps/hospital10_nocspace_dynamic34.csv')
 
     # smaller maps
     #grid, start, goal = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/map1.csv')
     #dynamic_grid, _, _ = load_map('src/PathPlanning/path_planning/src/2d_imp/maps/unknown_map1.csv')
-    is_dynamic = True
+
+    # if there are dynamic maps say true, Only scale 10 has maps because I had to hand alter them
+    is_dynamic = False
     # Search
     d_star = DStar(grid, dynamic_grid, start, goal, is_dynamic)
     print("initialized, making map")
         
     # Visualize the map
     if show_static_map:
-        d_star.draw_path(grid, "static map x")
+        d_star.draw_path(grid, "static map x" + str(scale) + " scale")
         print("map made, running D*")
     else:
         print("running D*")
         
     # Run D*
-    # d_star.run()
+    d_star.run()

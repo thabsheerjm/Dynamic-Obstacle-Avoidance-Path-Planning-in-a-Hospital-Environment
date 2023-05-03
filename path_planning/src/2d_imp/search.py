@@ -332,7 +332,8 @@ class DStar:
         while current_state is not self.goal:
             # update its sensor values
             step += 1
-            self.dynamic_grid = self.get_dyn_map(step)
+            if self.is_dynamic:
+                self.dynamic_grid = self.get_dyn_map(step)
 
             # Check if any repair needs to be done
             # using self.prepare_repair

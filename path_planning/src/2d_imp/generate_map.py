@@ -113,7 +113,7 @@ class MapMaker:
                 return 0
         
         return 1
-
+    
 
 if __name__ == "__main__":
     rospy.init_node('cartographer', anonymous=True)
