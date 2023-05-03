@@ -12,4 +12,16 @@ Requirements
 * Ros1
 * Unity 2020.3
 
+How to Run
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
++ D*
+
+
++HPPRM
+
+
++ Spline based DWA
+- Navigate to the directory path_planning/src/dwa_spline/
+- Run the python file DWA_main.py
+
 
