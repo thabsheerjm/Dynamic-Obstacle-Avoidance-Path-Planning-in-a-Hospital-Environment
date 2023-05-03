@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 
 import rospy
+from std_msgs.msg import Header
 from geometry_msgs.msg import PoseStamped, Twist, Pose
 from nav_msgs.msg import OccupancyGrid, Path, MapMetaData
 
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 import math
-
+#TODO: check if start sub is reseting path and/or open -> look in all subs
+#TODO: to debug maybe print the grid to something else
 
 # Class for each node in the grid
 class Node:
@@ -16,8 +18,8 @@ class Node:
         self.is_obs = is_obs  # obstacle?
         self.is_dy_obs = is_dy_obs  # dynamic obstacle?
         self.tag = "NEW"  # tag ("NEW", "OPEN", "CLOSED")
-        self.h = 100000000  # cost to goal (NOT heuristic)
-        self.k = 100000000  # best h
+        self.h = 10000000000000  # cost to goal (NOT heuristic)
+        self.k = 10000000000000  # best h
         self.parent = None  # parent node
         self.cost = cost # cost map value between 0 and 100 (% confidence it is obstacle)
 
@@ -28,29 +30,11 @@ class DStar:
         # (make the subscribers update each thing in the handlers)
         
         rospy.loginfo("initializing d*") 
-        rospy.loginfo("setting up subscribers")   
-
-        #subscribers
-        # /gopher_presence/move_base/global_costmap/costmap --> grid (OccupancyGrid)
-        rospy.Subscriber("/gopher_presence/move_base/global_costmap/costmap", OccupancyGrid, self.make_grid)
-        # /gopher_presence/move_base/local_costmap/costmap --> dynamic_grid (OccupancyGrid)
-        # rospy.Subscriber("/gopher_presence/move_base/local_costmap/costmap", OccupancyGrid, self.make_dynamicGrid)
-        # /model_pose # Pose Stamped (start/current state)
-        rospy.Subscriber("/model_pose", PoseStamped, self.update_start)
-
-        rospy.Subscriber("/gopher_presence/move_base_simple/goal", PoseStamped, self.update_goal)
-
-        rospy.loginfo("setting up publishers")
-        # /gopher_presence/move_base/TrajectoryPlannerROS/global_plan (copy for visualization, Path)
-        self.pathPub = rospy.Publisher('/gopher_presence/d_star/path', Path, queue_size=10)
-        # /gopher_presence/base_controller/cmd_vel (twist)
-        self.velPub = rospy.Publisher('/gopher_presence/base_controller/cmd_vel', Twist, queue_size= 10)
-        self.movebase_pathpub = rospy.Publisher('/gopher_presence/move_base/TrajectoryPlannerROS/global_plan', Path, queue_size=10)
 
         # Maps
         self.grid = grid  # the pre-known grid map
         self.gridinfo = MapMetaData()
-        self.resolution_mod = 3.0
+        self.resolution_mod = 9.0
 
         self.dynamic_grid = dynamic_grid  # the actual grid map (with dynamic obstacles)
         self.dynamic_gridinfo = None
@@ -81,21 +65,59 @@ class DStar:
         self.path_list = [PoseStamped()]
 
         # cut down on the grid and only look at a middle square
-        self.row_min = 10 # 280
-        self.row_max = 90 # 615
-        self.col_min = 10
-        self.col_max = 90
+        # for 3,  min 30, max 70 for both
+        # for 2, min 70 (row), 100 (col), max 155 both
+        self.row_min = 0 # 280
+        self.row_max = 100000 # 615
+        self.col_min = 0
+        self.col_max = 100000
+
+        self.stolen_header = Header()
+
+        ############################################ ROS THINGS ###############################
+
+        rospy.loginfo("setting up subscribers")   
+
+        #subscribers
+        # /gopher_presence/move_base/global_costmap/costmap --> grid (OccupancyGrid)
+        
+        #rospy.Subscriber("/gopher_presence/move_base/global_costmap/costmap", OccupancyGrid, self.make_grid)
+        
+        rospy.Subscriber("map", OccupancyGrid, self.make_grid)
+        
+        # /gopher_presence/move_base/local_costmap/costmap --> dynamic_grid (OccupancyGrid)
+        # rospy.Subscriber("/gopher_presence/move_base/local_costmap/costmap", OccupancyGrid, self.make_dynamicGrid)
+        # /model_pose # Pose Stamped (start/current state)
+        rospy.Subscriber("/model_pose", PoseStamped, self.update_start)
+
+        rospy.Subscriber("/gopher_presence/move_base_simple/goal", PoseStamped, self.update_goal)
+
+        rospy.loginfo("setting up publishers")
+        # /gopher_presence/move_base/TrajectoryPlannerROS/global_plan (copy for visualization, Path)
+        self.pathPub = rospy.Publisher('/gopher_presence/d_star/path', Path, queue_size=10)
+        # /gopher_presence/base_controller/cmd_vel (twist)
+        self.velPub = rospy.Publisher('/gopher_presence/base_controller/cmd_vel', Twist, queue_size= 1)
+        self.movebase_pathpub = rospy.Publisher('/gopher_presence/move_base/TrajectoryPlannerROS/global_plan', Path, queue_size=10)
+        self.graphpub = rospy.Publisher('/d_star/graph', OccupancyGrid, queue_size= 10)
+        self.headingpub = rospy.Publisher('/d_star/heading', PoseStamped, queue_size= 10)
+        self.facingpub = rospy.Publisher('/d_star/facing', PoseStamped, queue_size= 10)
         
 
     def update_goal(self, data):
         '''subscriber function to get the goal
         '''
         rospy.logwarn("Recieved a goal at:")
-        rospy.loginfo(data.pose.position)
+        rospy.loginfo([data.pose.position.x, data.pose.position.y])
         rospy.logwarn("in the grid coordinates it is at:")
         (row, col) = self.global2grid((data.pose.position.x, data.pose.position.y))
+        self.stolen_header = data.header
+
         grid_goal = [row, col]
         rospy.loginfo(grid_goal)
+        rospy.logwarn("and the robot is starting at:")
+        rospy.loginfo([self.current_state.position.x, self.current_state.position.y])
+        rospy.logwarn("or, in grid coordinates at:")
+        rospy.loginfo([self.start.row, self.start.col])
 
         if (row < len(self.grid_node) and col < len(self.grid_node[0])):
             self.goal = self.grid_node[grid_goal[0]][grid_goal[1]]
@@ -128,9 +150,11 @@ class DStar:
         ''' subcriber function attached to /model_pose
             PoseStamped, in gobal coordinate frame 
         '''
+        old_start = self.global2grid((self.current_state.position.x, self.current_state.position.y))
         grid_start = self.global2grid((data.pose.position.x, data.pose.position.y))
         # rospy.logwarn("looking for start, the grid size is: " + str(len(self.grid_node)) + " by " + str(len(self.grid_node[0])))
-        # rospy.logwarn("start at coord "+ str(grid_start))
+        if old_start != grid_start:
+            rospy.logwarn("start at coord "+ str(grid_start))
         # rospy.logwarn(self.grid_node)
     
         if ( len(self.grid_node) > grid_start[0]) and (len(self.grid_node[0]) > grid_start[1]):
@@ -145,23 +169,100 @@ class DStar:
 
         self.gridinfo = data.info
         # rospy.loginfo(self.gridinfo)
+        
 
         original_height = self.gridinfo.height
         original_width = self.gridinfo.width
         self.size_row = int(self.gridinfo.height/self.resolution_mod)
         self.size_col = int(self.gridinfo.width/self.resolution_mod)
-        self.gridinfo.resolution = self.gridinfo.resolution*self.resolution_mod*self.resolution_mod
+        self.gridinfo.resolution = self.gridinfo.resolution*self.resolution_mod#*self.resolution_mod
 
-        self.grid = [[None for i in range(self.size_col)] for j in range(self.size_row)]
-        self.grid_node = [[None for i in range(self.size_col)] for j in range(self.size_row)]
+        rospy.loginfo("grid should be " + str(original_height) + " x " + str(original_width))
+        self.grid = [[None for i in range(original_width)] for j in range(original_height)]
+        
 
-        for row in range(self.size_row):
-            self.grid[row] = data.data[int(self.size_col*(row*self.resolution_mod)):int(self.size_col*((row*self.resolution_mod)+1))]
-            for col in range(self.size_col):
-                self.grid_node[row][col] = self.instantiate_node((row, col), self.grid[row][col])
-    
+        for row in range(original_height):
+            # rospy.loginfo("read up to row " + str(row))
+            self.grid[row] = data.data[int(original_width*row):int(original_width*(row+1)-1)]
+
+        simple_grid = self.simplify_map(self.grid, self.resolution_mod, len(self.grid), len(self.grid[0]))
+        self.simple_grid = simple_grid
+
+        self.grid_node = [[None for i in range(len(simple_grid[0]))] for j in range(len(simple_grid))]
+
+        for row in range(len(simple_grid)):
+            for col in range(len(simple_grid[0])):
+                self.grid_node[row][col] = self.instantiate_node((row, col), simple_grid[row][col])
+        # rospy.loginfo(self.grid_node)
+
+        for row in range(len(simple_grid)):
+            for col in range(len(simple_grid[0])):
+                if self.grid_node[row][col] == None:
+                    rospy.logwarn("how is this node None I litterally just set you to a Node")
+
         rospy.loginfo("grid made :D")
-    
+        self.publishgrid()
+
+    def publishgrid(self):
+        grid = OccupancyGrid()
+        grid.header = self.stolen_header
+        grid.info = self.gridinfo
+        grid.info.height = grid.info.height/self.resolution_mod
+        grid.info.width = grid.info.width/self.resolution_mod -1
+        data = []
+        
+        for row in self.simple_grid:
+            for col in row:
+                data.append(int(col*100))
+              
+         
+        grid.data = data
+        self.graphpub.publish(grid)
+
+
+        
+    def simplify_map(self, grid, resolution, size_row, size_col):
+
+        new_row_size = int(len(grid)/resolution)
+        new_col_size = int(len(grid[0])/resolution)
+
+        rospy.loginfo("new height is " + str(new_row_size))
+        rospy.loginfo("new width is " + str(new_col_size))
+
+        simple_grid = [[None for i in range(new_col_size)] for j in range(new_row_size)]
+
+        rospy.logwarn("length of the grid data is :")
+        rospy.loginfo(len(simple_grid))
+        rospy.logwarn("height is :")
+        rospy.loginfo(len(simple_grid[0]))
+
+
+        for row in range(new_row_size):
+            for col in range(new_col_size):
+                # rospy.loginfo("made it to :" + str(row) + ", " + str(col))
+                simple_grid[row][col] = self.get_value(row, col, grid, resolution)
+
+        return simple_grid
+         
+    def get_value(self, row, col, grid, resolution):
+        new_row = int(row*resolution)
+        new_col = int(col*resolution)
+        obstacle_threshold = 90
+        neighbor_math = []
+
+        for i in range(int(resolution)):
+            for j in range(int(resolution)):
+                if i != 0 and j !=0:
+                    neighbor_math.append([i, j])
+        
+        if grid[new_row][new_col] > obstacle_threshold:
+            return 1
+        
+        for mod in neighbor_math:
+            if grid[new_row+mod[0]][new_col+mod[1]] > obstacle_threshold:
+                return 1
+        
+        return 0
 
     def make_dynamicGrid(self, data):
         self.dynamic_gridinfo = data.info
@@ -198,8 +299,8 @@ class DStar:
             row = (point[1] - origin[1])/resolution
             col = (point[0] - origin[0])/resolution
         else:
-            row = 1000000000
-            col = 1000000000
+            row = 10000000000000
+            col = 10000000000000
         return [int(row), int(col)]
     
     def grid2global(self, point):
@@ -209,13 +310,12 @@ class DStar:
         resolution = self.gridinfo.resolution
 
         if resolution:
-            row = point.row*resolution + origin[1]
+            row = point.row*resolution + origin[1] + resolution/2
             col = point.col*resolution + origin[0]
         else: 
-            row = 100000000
-            col = 100000000
+            row = 10000000000000
+            col = 10000000000000
         return [col, row]
-
 
     def instantiate_node(self, point, val):
         ''' Instatiate a node given point (x, y) 
@@ -231,7 +331,7 @@ class DStar:
         else:
             dynamic_object = False  
 
-        if val > 50 or val == -1:
+        if val == 1 or val == -1:
             node = Node(row, col, True,
                         dynamic_object, val)
         else:
@@ -287,14 +387,19 @@ class DStar:
         for i in range(-1, 2):
             for j in range(-1, 2):
                 # Check range
-                if row + i < 0 or row + i >= len(self.grid) or \
-                        col + j < 0 or col + j >= len(self.grid[0]):
+                if row + i < 0 or row + i >= len(self.grid_node) or \
+                        col + j < 0 or col + j >= len(self.grid_node[0]):
                     continue
                 # Do not append the same node
                 if i == 0 and j == 0:
                     continue
                 if (self.row_min < row < self.row_max) and (self.col_min < col < self.col_max):
-                    neighbors.append(self.grid_node[row + i][col + j])
+                    cell = self.grid_node[row + i][col + j]
+                    if cell == None:
+                        rospy.logwarn("looking at spot [" + str(row+i) + ", " + str(col+j) + "]")
+                        rospy.loginfo("the node grid is " + str(len(self.grid_node)) + " x " + str(len(self.grid_node[0])))
+                        rospy.logwarn("grid was not made right, pretending its all right")
+                neighbors.append(self.grid_node[row + i][col + j])
         return neighbors
 
     def cost(self, node1, node2):
@@ -310,11 +415,11 @@ class DStar:
 
         # If any of the node is an obstacle
         if node1.is_obs or node2.is_obs:
-            return 100000000
+            return 10000000000000
         # Euclidean distance
         a = node1.row - node2.row
         b = node1.col - node2.col
-        return (a ** 2 + b ** 2) ** (1 / 2)
+        return 5.0*(a ** 2 + b ** 2) ** (1 / 2)
 
     def process_state(self):
         ''' Pop the node in the open list 
@@ -334,6 +439,8 @@ class DStar:
         # Get neighbors of the node
         # using self.get_neighbors
         neighbors = self.get_neighbors(node)
+
+        # rospy.loginfo("found " + str(len(neighbors)) + " neighbors")
 
         # I HEAVILY UTILIZED THE ATTACHED SOURCE ON D*
         # In Proceedings IEEE International Conference on Robotics and Automation, May 1994.
@@ -381,7 +488,7 @@ class DStar:
 
         k_min = 0
         h_y = node.h
-        while self.open and k_min < h_y and k_min is not 100000000:
+        while self.open and k_min < h_y and k_min is not 10000000000000:
             k_min = self.process_state()
 
         if self.open:
@@ -408,7 +515,7 @@ class DStar:
         # if the goal is surrounded the minimum k should be infinity because they all go through an obstacle
         if surrounded:
             print("Goal is blocked off, no path possible")
-            return 100000000
+            return 10000000000000
 
         # Put the obstacle node and the neighbor node back to Open list
         obstacle_h = self.cost(obstacle_node, obstacle_node.parent) + obstacle_node.parent.k
@@ -475,21 +582,28 @@ class DStar:
         current_goal = self.goal
         self.insert(self.goal, 0)
         current_state = self.start
-
+        self.start.is_obs = 0
         # Process until open set is empty or start is reached
         while self.open and current_goal == self.goal:
             # rospy.loginfo(len(self.open))
             # using self.process_state()
             self.process_state()
+        
+        if current_goal != self.goal:
+            rospy.logwarn("recieved a new goal abandoning old path")
+
 
         rospy.loginfo("FOUND A PATH!!!!")
+        rospy.loginfo("path is " + str(len(self.path)) + " nodes long")
         # Visualize the first path if found
         self.get_backpointer_list(self.start)
+        self.pathPub.publish(self.ros_path)
         rospy.loginfo("path visualized")
 
         if self.path == []:
             rospy.logwarn("NO PATH! :(")
             print("No path is found")
+            rospy.loginfo("the length of the node grid is :" + str(len(self.grid_node)) + " x " + str(len(self.grid_node[0])))
             return
 
         # Start from start to goal
@@ -505,15 +619,144 @@ class DStar:
             # Replan a path from the current node
             # using self.repair_replan
             self.repair_replan(current_node)
-
+            
             # Get the new path from the current node
-            self.get_backpointer_list(current_node)
+            # self.get_backpointer_list(current_node)
             # print("parent of (", current_state.col, ",", current_state.row, ") is (", current_state.parent.col, ",",
             #      current_state.parent.row, ")")
 
             # for visualizing and move here
-            # self.move_robot(current_node)
-            current_node = current_node.parent
+            self.vec_move_robot(current_node)
+            # self.drive_sidways(1)
+
+            path_coord = self.grid2global(current_node)
+            #self.drive_forward(1.0)
+            tolerance = 1
+            dist_to_point = self.dist(path_coord[0], path_coord[1], self.current_state.position.x, self.current_state.position.y)
+            # rospy.loginfo(dist_to_point)
+            if dist_to_point < tolerance\
+                or (self.start.row == current_node.row and self.start.col == current_node.col):
+                current_node = current_node.parent
+
+
+    def vec_move_robot(self, point):
+        ''' move the robot to the given point
+
+            arguments:
+            point - Node for the next point in the path
+        '''
+        current_pos = self.current_state.position
+        current_ori = self.current_state.orientation
+        orientation_list = [current_ori.x, current_ori.y, current_ori.z, current_ori.w]
+        (_, _, yaw) = euler_from_quaternion (orientation_list)
+
+        #rospy.loginfo("robot yaw is :")
+        #rospy.loginfo(180*yaw/math.pi)
+        
+        goal = self.grid2global(point)
+        goal_y = goal[1]
+        goal_x = goal[0]
+        allowable_error = 0.01
+        lin_vel_offset = 0.1
+        lin_vel_modifyer = 1
+        ang_vel_offset = 0.01
+        ang_vel_modifyer = 1
+        base_speed = 0.1
+
+        distance = self.dist(goal_x, goal_y, current_pos.x, current_pos.y)
+        heading = math.atan2(goal_y - current_pos.y, goal_x - current_pos.x)
+
+        facing_pose = self.make_pose(current_pos.x, current_pos.y, yaw)
+        heading_pose = self.make_pose(current_pos.x, current_pos.y, heading)
+
+        self.facingpub.publish(facing_pose)
+        self.headingpub.publish(heading_pose)
+
+        #rospy.loginfo("angle between points is :")
+        #rospy.loginfo(180*heading/math.pi)
+        adjust_heading = self.angle_diff(heading, yaw )
+        adjust_heading = adjust_heading%math.pi
+        
+        goal_mod = 1
+        apf_mod = 1
+
+        goal_vector = [math.cos(adjust_heading)*base_speed, math.sin(adjust_heading)*base_speed]
+        apf_vector = self.artificialField()
+        move_vector = [0.0, 0.0]
+        move_vector[0] = goal_mod*goal_vector[0] +apf_mod*apf_vector[0]
+        move_vector[1] = goal_mod*goal_vector[1] +apf_mod*apf_vector[1]
+        robot_cmd = Twist()
+        # the robot only moves with commands from lin x and ang z
+        robot_cmd.linear.y = 0
+        robot_cmd.linear.z = 0.0
+        robot_cmd.angular.x = 0.0
+        robot_cmd.angular.y = 0.0
+
+        move_ang = math.atan2(move_vector[1], move_vector[0])
+        #if move_ang > math.pi/6:
+        if abs(adjust_heading) > math.pi/6:
+            robot_cmd.linear.x = 0
+            robot_cmd.angular.z = heading/20 
+            self.velPub.publish(robot_cmd)
+        elif abs(adjust_heading) > math.pi/12:
+            robot_cmd.linear.x = distance/10 + 0.01
+            robot_cmd.angular.z = heading/30  
+            self.velPub.publish(robot_cmd)
+        else:
+            # print("moving the robot to " + str(goal_vector) + " heading is " + str(180*adjust_heading/math.pi))
+            robot_cmd.linear.x = distance/10 + 0.05
+            robot_cmd.angular.z = heading/100
+            self.velPub.publish(robot_cmd)
+
+
+    def artificialField(self):
+        '''TODO: make this!!!!!!
+            uses the laser readings to give an artifical potential field
+            returns a force vector to avoid obstacles
+        '''
+        return [0, 0]
+    
+    def angle_diff(self, ang1, ang2):
+        ''' gets the difference between angles
+
+            arg: ang1 - angle to measure against
+                 ang2 - ange to get differnece with 
+        '''
+        ang1 = ang1%math.pi
+        ang2 = ang2%math.pi
+        
+        diff = ang2 - ang1        
+        #if diff > math.pi:
+        #    diff = (diff - 2*math.pi)
+        #elif diff < -math.pi:
+        #    diff = (diff + 2*math.pi)
+        
+        return diff
+
+
+    def drive_forward(self, speed):
+        '''stops the robot from moving'''
+        rospy.logwarn("charge!")
+        go = Twist()
+        go.linear.x = speed
+        go.linear.y = 0.0
+        go.linear.z = 0.0
+        go.angular.x = 0.0
+        go.angular.y = 0.0
+        go.angular.z = 0.0
+        self.velPub.publish(go)
+
+    def drive_sidways(self, speed):
+        '''stops the robot from moving'''
+        rospy.logwarn("crab!")
+        go = Twist()
+        go.linear.x = 0.0
+        go.linear.y = speed
+        go.linear.z = 0.0
+        go.angular.x = 0.0
+        go.angular.y = 0.0
+        go.angular.z = 0.0
+        self.velPub.publish(go)
 
 
     def move_robot(self, point):
@@ -554,24 +797,32 @@ class DStar:
             self.velPub.publish(robot_cmd)
     
     def dist(self, x1, y1, x2, y2):
-        return math.sqrt((x1-x2)**2 + (y1-y2**2))
+        return math.sqrt((x1-x2)**2 + (y1-y2)**2)
 
     def get_backpointer_list(self, node):
         ''' Keep tracing back to get the path from a given node to goal '''
         # Assume there is a path from start to goal
         cur_node = node
         self.path = [cur_node]
+        self.path_list.append(self.current_state)
         point1 = [cur_node.row, cur_node.col]
-
+        # rospy.loginfo("current Node/starting node is " + str(cur_node))
+        # rospy.loginfo("goal is node " + str(self.goal))
+        # rospy.loginfo("and the bool for obstacle is not " + str(cur_node.is_obs))
+        # rospy.loginfo(cur_node != self.goal)
+        # rospy.loginfo(cur_node != None)
+        # rospy.loginfo(not cur_node.is_obs)
         self.path_list = []
         while cur_node != self.goal and \
                 cur_node != None and \
                 not cur_node.is_obs:
             # trace back
+            rospy.loginfo("the path is building, currently " + str(len(self.path)) + " nodes long")
             cur_node = cur_node.parent
+            
             if cur_node != None:
                 point2 = [cur_node.row, cur_node.col]
-                heading = math.atan2(point1[1]-point2[1], point1[0]-point2[0])
+                heading = math.atan2(point2[0]-point1[0], point2[1]-point1[1])
                 path_point = self.grid2global(cur_node)
                 current_pose = self.make_pose(path_point[0], path_point[1], heading)
                 point1 = point2
@@ -581,8 +832,9 @@ class DStar:
 
         # If there is not such a path
         if cur_node != self.goal:
-            self.path = []
-            self.ros_path.poses = []
+            rospy.logwarn("last node was not the goal")
+            # self.path = []
+            # self.ros_path.poses = []
         
         if cur_node == self.goal:
             goal_stamped = PoseStamped()
@@ -595,14 +847,17 @@ class DStar:
 
             self.path_list.append(goal_stamped)
         
-            self.ros_path.poses = self.path_list
-            self.ros_path.header.frame_id = "map"
-            self.ros_path.header.seq = 0
-            self.ros_path.header.stamp.secs = 0
-            self.ros_path.header.stamp.nsecs = 0
+        self.ros_path.poses = self.path_list
+        self.ros_path.header.frame_id = "map"
+        self.ros_path.header.seq = 0
+        self.ros_path.header.stamp.secs = 0
+        self.ros_path.header.stamp.nsecs = 0
 
-            self.pathPub.publish(self.ros_path)
-
+        #self.ros_path.header = self.stolen_header
+        rospy.loginfo("publishing the path:")
+        # rospy.loginfo(self.ros_path)
+        self.pathPub.publish(self.ros_path)
+        
 
     def make_pose(self, x, y, yaw):
         ros_pose = Pose()
@@ -614,6 +869,10 @@ class DStar:
         ros_pose.orientation.y = yy
         ros_pose.orientation.z = zz
         ros_pose.orientation.w = ww
+        #ros_pose.orientation.x = 0
+        #ros_pose.orientation.y = 0
+        #ros_pose.orientation.z = 0
+        #ros_pose.orientation.w = 1
         stamped = PoseStamped()
         stamped.pose = ros_pose
         stamped.header.frame_id = "map"
@@ -621,6 +880,7 @@ class DStar:
         stamped.header.stamp.secs = 0
         stamped.header.stamp.nsecs = 0
         return stamped
+        # return ros_pose
 
 
 if __name__ == "__main__":
@@ -635,4 +895,5 @@ if __name__ == "__main__":
     while not rospy.is_shutdown:
         rospy.spin()
     rospy.spin()
+    d_star.stopRobot()
     print("shutting down")
