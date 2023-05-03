@@ -19,7 +19,7 @@ For this project, we have tested out out three different planning algorithms, na
 
 ### Spline based DWA
 
- * Navigate to the directory path_planning/src/dwa_spline/
+ * Navigate to the directory /path_planning/src/dwa_spline/
  * Run the python file DWA_main.py
  * 'python3 DWA_main.py'
 
