@@ -36,10 +36,10 @@ rosrun path_planning generate_maps.py
 * D* Unity Implementation (little broken):  
 The files are in the d_star folder  
 It can be run by using the following commands  
-  
+```  
 roslaunch gopher_unity_endpoint gopher_presence.launch  
 rosrun path_planning d_star.py  
-  
+```  
 In the ROS setup move_base has an altered topic to publish messages to so using hte pose in RVIZ controls the robto using d* and not move_base   
   
   
@@ -51,7 +51,7 @@ In the ROS setup move_base has an altered topic to publish messages to so using 
  * Navigate to the directory /path_planning/src/dwa_spline/
  * Run the python file DWA_main.py:  
  ```
-   $ python3 DWA_main.py
+  python3 DWA_main.py
  ```
    
 
