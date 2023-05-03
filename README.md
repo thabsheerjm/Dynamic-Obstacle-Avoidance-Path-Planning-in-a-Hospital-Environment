@@ -50,6 +50,9 @@ In the ROS setup move_base has an altered topic to publish messages to so using 
 
  * Navigate to the directory /path_planning/src/dwa_spline/
  * Run the python file DWA_main.py
- * 'python3 DWA_main.py'
-
+   
+   
+ python3 DWA_main.py'
+  
+   
 
