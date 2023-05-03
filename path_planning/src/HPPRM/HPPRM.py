@@ -219,3 +219,5 @@ class Utils:
         im_bw = cv2.copyMakeBorder(
             im_bw, 3, 3, 3, 3, cv2.BORDER_CONSTANT, value=0)
         self.map_inflated = cv2.rotate(im_bw, cv2.ROTATE_90_CLOCKWISE)
+
+
