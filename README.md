@@ -12,7 +12,7 @@ For this project, we have tested out out three different planning algorithms, na
 
 ## How to Run
 ### D*
-*2-D implementation:  
+* 2-D implementation:  
  In the d2_imp folder:  
   
 The D* toy problem is run in main.py of the 2d_imp folder   
@@ -33,7 +33,7 @@ rosrun path_planning generate_maps.py
 		map_scale - how much the map is scaled from the hospitals 0.05m/grid  
 		with_cspace - adjust which message the node recieves the map from, /map or /move_base/global_costmap  
 			  
-D* Unity Implementation (little broken):  
+* D* Unity Implementation (little broken):  
 The files are in the d_star folder  
 It can be run by using the following commands  
   
@@ -49,10 +49,8 @@ In the ROS setup move_base has an altered topic to publish messages to so using 
 ### Spline based DWA
 
  * Navigate to the directory /path_planning/src/dwa_spline/
- * Run the python file DWA_main.py
-   
-   
- python3 DWA_main.py'
+ * Run the python file DWA_main.py :   
+   python3 DWA_main.py'
   
    
 
