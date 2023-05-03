@@ -21,7 +21,8 @@ How to Run
 
 
 + Spline based DWA
-- Navigate to the directory path_planning/src/dwa_spline/
-- Run the python file DWA_main.py
+ Navigate to the directory path_planning/src/dwa_spline/
+ Run the python file DWA_main.py
+ 'python3 DWA_main.py'
 
 
