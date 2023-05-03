@@ -26,12 +26,13 @@ To run adjust the parameters and run main.py. The maps need to stay in the same 
   
 To make more maps you can run generate_maps.py  
 The map generator requires unity and ROS to be running becasue it pulls the maps from the ROS messages  
+```
 roslaunch gopher_unity_endpoint gopher_presence.launch  
 rosrun path_planning generate_maps.py  
-  
-	parameters:  
-		map_scale - how much the map is scaled from the hospitals 0.05m/grid  
-		with_cspace - adjust which message the node recieves the map from, /map or /move_base/global_costmap  
+```
+parameters:  
+	   map_scale - how much the map is scaled from the hospitals 0.05m/grid  
+	   with_cspace - adjust which message the node recieves the map from, /map or /move_base/global_costmap  
 			  
 * D* Unity Implementation (little broken):  
 The files are in the d_star folder  
