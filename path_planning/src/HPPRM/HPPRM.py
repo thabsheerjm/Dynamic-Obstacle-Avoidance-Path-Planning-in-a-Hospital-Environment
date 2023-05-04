@@ -87,7 +87,7 @@ class PRM:
             self.sampling_coords = np.array([])
             self.graph = Graph()
 
-        plt.savefig("./results/final_path.png")
+        plt.savefig("{path}/final_path.png") #Change this path to where you'd like the figure to be saved in your PC
         plt.show()
 
     def samplingCoords(self):
@@ -165,13 +165,13 @@ class PRM:
         print("Path Found !!!")
         print("Coordinates saved in results/data.csv")
         print(len(end_path))
-        CSVFile_path = "./results/data.csv"
+        CSVFile_path = "./results/data.csv" #The pose stamps are saved to a csv file so that they can be used as inputs to a controller.
         header = [['x', 'y']]
         with open(CSVFile_path, 'w', encoding='UTF8', newline='') as f:
             writer = csv.writer(f)
             writer.writerows(header)
             writer.writerows(pointsToEnd)
-        return end_path
+
     def nodeIdx(self, pt):
         return np.where((self.collisionFreePoints == pt).all(axis=1))[0][0]
 
