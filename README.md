@@ -45,7 +45,11 @@ In the ROS setup move_base has an altered topic to publish messages to so using 
   
   
 ### HPPRM
-
+To run the HPPRM algorithm, a map of any image type, the start and end points in the map must be provided. The default start and goal locations are [50,10] and [50,200] respectively. This is specified for the sample hospital map that was tested. 
+```
+python3 src/main.py --start 50 10 --goal 50 200 --FilePath '{file path from your pc}'
+```
+Before running this command, navigate to HPPRM.py, to line 90 and changee the path where you'd like the output figure to be saved in your pc.
 
 ### Spline based DWA
 
