@@ -60,3 +60,7 @@ Before running this command, navigate to HPPRM.py, to line 90 and changee the pa
  ```
    
 
+### Contributors 
+* Thabsheer Jafer Machingal
+* Dominic Ferro
+* Girivaasan Chandrasekaran
